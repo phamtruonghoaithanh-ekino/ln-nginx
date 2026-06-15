@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1: What is nginx — and serve your first site</title>
+<style>
+  @page { margin: 2cm; size: A4; }
+  @media print { body { font-size: 11pt; } }
+  :root {
+    --bg: #faf9f8;
+    --fg: #1a1a1a;
+    --accent: #269539;
+    --accent-light: #e8f5e9;
+    --code-bg: #f0eee9;
+    --border: #d4d2cc;
+    --warm: #fff8f0;
+    --width: min(48rem, 100% - 3rem);
+  }
+  html { font-size: 16px; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 2rem 0;
+  }
+  .container { max-width: var(--width); margin: 0 auto; }
+  h1, h2, h3 { font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 600; line-height: 1.3; }
+  h1 { font-size: 2rem; margin-bottom: 0.2em; color: var(--accent); }
+  h2 { font-size: 1.35rem; margin-top: 2em; border-bottom: 2px solid var(--border); padding-bottom: 0.3em; }
+  h3 { font-size: 1.1rem; margin-top: 1.5em; }
+  p, li { margin-bottom: 0.8rem; }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 1rem 1.2rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    border-left: 4px solid var(--accent);
+  }
+  .diagram {
+    background: var(--warm);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    font-family: 'SF Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  blockquote {
+    margin: 1.5em 0;
+    padding: 0.8em 1.2em;
+    background: var(--accent-light);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  blockquote p { margin: 0; }
+  .callout {
+    background: #fff3cd;
+    border-left: 4px solid #856404;
+    padding: 0.8em 1.2em;
+    border-radius: 4px;
+    margin: 1.5em 0;
+  }
+  a { color: var(--accent); text-decoration: underline; }
+  a:hover { text-decoration: none; }
+  .ref { font-size: 0.85rem; color: #555; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+  .exercise {
+    background: #f0f4ff;
+    border: 1px solid #b8c9e8;
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin: 1.5em 0;
+  }
+  .exercise h3 { margin-top: 0; color: #1a3a6a; }
+  kbd {
+    font-family: 'SF Mono', monospace;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    padding: 0.1em 0.4em;
+    box-shadow: 0 1px 0 #bbb;
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Lesson 1: What Is nginx?</h1>
+<p class="ref">Part of the <em>nginx learning track</em>. See also: <a href="../reference/0001-glossary-and-quickref.html">Glossary &amp; Quick Reference</a></p>
+
+<h2>The Big Idea</h2>
+
+<p>
+<strong>nginx</strong> (pronounced "engine x") is a web server that can also act as a
+<strong>reverse proxy</strong>, <strong>load balancer</strong>, <strong>HTTP cache</strong>, and
+<strong>TLS terminator</strong>. It was created by <strong>Igor Sysoev</strong> in 2004 to solve
+the <strong>C10K problem</strong> — handling 10,000 simultaneous connections without
+crashing or consuming all your RAM.
+</p>
+
+<p>
+Unlike older servers (Apache) that spawn a process or thread <em>per connection</em>,
+nginx uses an <strong>event-driven, asynchronous, non-blocking</strong> architecture.
+One worker process can handle thousands of connections at once.
+</p>
+
+<h3>How It's Different from Apache</h3>
+
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <tr style="border-bottom:1px solid var(--border);">
+    <th style="text-align:left; padding:0.5em;">Feature</th>
+    <th style="text-align:left; padding:0.5em;">Apache</th>
+    <th style="text-align:left; padding:0.5em;">nginx</th>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;">Connection model</td>
+    <td style="padding:0.5em;">Process/thread per connection</td>
+    <td style="padding:0.5em;">Event-driven, single-threaded workers</td>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;">Memory per connection</td>
+    <td style="padding:0.5em;">~1 MB+</td>
+    <td style="padding:0.5em;">~550 bytes (idle keepalive)</td>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;">Static files</td>
+    <td style="padding:0.5em;">Good</td>
+    <td style="padding:0.5em;">Excellent (sendfile + async I/O)</td>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;">Dynamic content</td>
+    <td style="padding:0.5em;">Built-in (mod_php, etc.)</td>
+    <td style="padding:0.5em;">Proxy to app server (FastCGI, uwsgi, proxy_pass)</td>
+  </tr>
+  <tr>
+    <td style="padding:0.5em;">Config</td>
+    <td style="padding:0.5em;">.htaccess per directory</td>
+    <td style="padding:0.5em;">Single centralized config</td>
+  </tr>
+</table>
+
+<h2>Architecture in One Diagram</h2>
+
+<div class="diagram">┌─────────────────────────────────────────────────────┐
+│                   nginx Master Process               │
+│  Reads config · binds sockets · spawns/reaps workers │
+└────────┬──────────┬──────────┬──────────┬────────────┘
+         │          │          │          │
+    ┌────▼───┐ ┌────▼───┐ ┌────▼───┐ ┌────▼───┐
+    │ Worker │ │ Worker │ │ Worker │ │ Worker │
+    │   #1   │ │   #2   │ │   #3   │ │   #4   │
+    └───┬────┘ └───┬────┘ └───┬────┘ └───┬────┘
+        │          │          │          │
+    ┌───▼──────────▼──────────▼──────────▼───┐
+    │   Event loop (epoll/kqueue) per worker  │
+    │   Handles thousands of connections       │
+    │   Non-blocking I/O on all operations    │
+    └──────────────────────────────────────────┘</div>
+
+<p>Each <strong>worker</strong> runs an event loop (like Node.js). It accepts new connections,
+reads requests, processes them, and sends responses — all without blocking. When one
+request is waiting for disk or upstream, the worker handles other requests.</p>
+
+<h2>The Configuration File</h2>
+
+<p>nginx configuration lives in a single file (or files included from it), typically
+<code>/etc/nginx/nginx.conf</code> or <code>/usr/local/etc/nginx/nginx.conf</code>.
+The syntax is <strong>C-style</strong> — braces <code>{ }</code>, semicolons <code>;</code>,
+and hashes <code>#</code> for comments.</p>
+
+<h3>Directives and Contexts</h3>
+
+<p>A <strong>directive</strong> is a name + parameters + <code>;</code>. A <strong>block directive</strong>
+opens a <code>{ }</code> context. The major contexts are:</p>
+
+<div class="diagram">main                     # global settings
+├── events               # connection processing method
+└── http                 # HTTP server configuration
+    ├── upstream         # group of backend servers
+    ├── server           # virtual host (domain + port)
+    │   ├── location     # URL path matching rules
+    │   └── location
+    └── server
+        └── location</div>
+
+<p>Key rule: <strong>contexts never overlap</strong>. A <code>location</code> only lives inside
+a <code>server</code>, which lives inside <code>http</code>. No exceptions.</p>
+
+<blockquote>
+<p><strong>Storage tip:</strong> nginx does <strong>not</strong> support <code>.htaccess</code> files.
+All configuration is centralized. This is by design — it keeps things predictable and performant.</p>
+</blockquote>
+
+<h2>Hands-on: Serve Your First Static Site</h2>
+
+<p>Let's make nginx serve a simple HTML page from your local machine.</p>
+
+<h3>Step 1: Create a site directory</h3>
+<pre>mkdir -p /tmp/nginx-demo/www
+echo '&lt;h1&gt;Hello from nginx!&lt;/h1&gt;' &gt; /tmp/nginx-demo/www/index.html</pre>
+
+<h3>Step 2: Create a minimal config</h3>
+<pre># /tmp/nginx-demo/nginx.conf
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    server {
+        listen 8080;
+
+        location / {
+            root /tmp/nginx-demo/www;
+        }
+    }
+}</pre>
+
+<p>Let's break this down:</p>
+<ul>
+  <li><code>events { }</code> — required context. Sets connection processing.</li>
+  <li><code>http { }</code> — wraps all HTTP-related config.</li>
+  <li><code>server { }</code> — one virtual host, listening on port 8080.</li>
+  <li><code>location / { }</code> — matches all URLs starting with <code>/</code>.</li>
+  <li><code>root ...</code> — maps the URL to a filesystem path.</li>
+</ul>
+
+<h3>Step 3: Start nginx with your config</h3>
+<pre>nginx -c /tmp/nginx-demo/nginx.conf</pre>
+
+<div class="callout">
+<strong>Note:</strong> You may need <code>sudo</code> depending on your system. On macOS with
+Homebrew, run <code>sudo nginx -c /tmp/nginx-demo/nginx.conf</code>.
+</div>
+
+<h3>Step 4: See it live</h3>
+<pre>curl http://localhost:8080/
+# → &lt;h1&gt;Hello from nginx!&lt;/h1&gt;</pre>
+
+<p>Or open <code>http://localhost:8080/</code> in a browser.</p>
+
+<h3>Step 5: Stop nginx when done</h3>
+<pre>nginx -s quit</pre>
+
+<div class="exercise">
+<h3>✏ Your Turn: Modify the Config</h3>
+<ol>
+  <li>Change the port from <code>8080</code> to <code>8081</code>.</li>
+  <li>Add a second <code>location</code> block that maps <code>/data</code> to
+    <code>/tmp/nginx-demo/data</code> (create this directory and a file in it).</li>
+  <li>Reload with <code>nginx -s reload</code> and test both paths.</li>
+</ol>
+</div>
+
+<h2>How Request Matching Works</h2>
+
+<p>When a request arrives, nginx picks a <code>location</code> in this order:</p>
+<ol>
+  <li><strong>Prefix match</strong>: scan all <code>location /path</code> directives,
+    remember the longest matching prefix.</li>
+  <li><strong>Regex match</strong>: scan all <code>location ~ pattern</code> directives.
+    If any matches, use it instead of the remembered prefix.</li>
+  <li>If no regex matches, use the remembered prefix.</li>
+</ol>
+
+<p>Example from the config above:</p>
+<pre>location / {          # prefix, length 1 — catch-all
+    root /tmp/nginx-demo/www;
+}
+location /images/ {  # prefix, length 8 — more specific
+    root /tmp/nginx-demo;
+}
+location ~ \.(gif|jpg|png)$ {  # regex — overrides both
+    root /tmp/nginx-demo/images;
+}</pre>
+
+<p>A request to <code>/images/cat.jpg</code> would:</p>
+<ol>
+  <li>Match both prefix locations — <code>/images/</code> (longer) wins so far.</li>
+  <li>Then match the regex <code>\.(gif|jpg|png)$</code> — regex wins overall.</li>
+  <li>File served from <code>/tmp/nginx-demo/images/images/cat.jpg</code> (root + URI).</li>
+</ol>
+
+<div class="callout">
+<strong>Gotcha:</strong> <code>root</code> appends the URI to the path. So
+<code>root /data; location /images/ { }</code> serves <code>/data/images/...</code>.
+To strip the location prefix, use <code>alias</code> instead.
+</div>
+
+<h2>Controlling nginx</h2>
+
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <tr style="border-bottom:1px solid var(--border);">
+    <th style="text-align:left; padding:0.5em;">Signal</th>
+    <th style="text-align:left; padding:0.5em;">Command</th>
+    <th style="text-align:left; padding:0.5em;">What it does</th>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;"><code>stop</code></td>
+    <td style="padding:0.5em;"><code>nginx -s stop</code></td>
+    <td style="padding:0.5em;">Immediate shutdown</td>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;"><code>quit</code></td>
+    <td style="padding:0.5em;"><code>nginx -s quit</code></td>
+    <td style="padding:0.5em;">Graceful shutdown (finish current requests)</td>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;"><code>reload</code></td>
+    <td style="padding:0.5em;"><code>nginx -s reload</code></td>
+    <td style="padding:0.5em;">Reload config without downtime</td>
+  </tr>
+  <tr>
+    <td style="padding:0.5em;"><code>reopen</code></td>
+    <td style="padding:0.5em;"><code>nginx -s reopen</code></td>
+    <td style="padding:0.5em;">Reopen log files (for log rotation)</td>
+  </tr>
+</table>
+
+<p><strong>How <code>reload</code> works:</strong> The master process checks the new config
+syntax, then starts new workers with the new config, and signals old workers to
+stop accepting connections and finish their current requests. Zero-downtime.</p>
+
+<h2>Primary Source</h2>
+<p>Read the official <a href="https://nginx.org/en/docs/beginners_guide.html">nginx
+Beginner's Guide</a> — it covers everything above with a slightly different
+example. Then bookmark the <a href="https://nginx.org/en/docs/">nginx documentation index</a>.</p>
+
+<hr>
+
+<h2>What You Learned</h2>
+<ul>
+  <li>nginx is an event-driven web server that handles high concurrency efficiently</li>
+  <li>It has one master process + several worker processes</li>
+  <li>Config is centralized, C-style, with nested contexts (<code>http → server → location</code>)</li>
+  <li>Prefix locations are compared by length; regex locations override them</li>
+  <li>You served your first static site on port 8080</li>
+  <li>You can <code>reload</code> without downtime</li>
+</ul>
+
+<blockquote>
+<strong>Next session:</strong> We'll look at <strong>reverse proxying</strong> — routing
+requests to a backend app like a Python or Node.js server. If you want to explore
+ahead, read the <a href="https://nginx.org/en/docs/beginners_guide.html">nginx
+Beginner's Guide</a>. When you're ready, ask: <em>"What's next?"</em> or any
+questions you have.
+</blockquote>
+
+</div>
+</body>
+</html>

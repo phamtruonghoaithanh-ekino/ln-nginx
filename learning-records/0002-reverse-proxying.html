@@ -1,0 +1,32 @@
+# Learning Record 0002: Reverse proxying with nginx
+
+## Date
+2026-06-13
+
+## What was learned
+- nginx acts as a reverse proxy by forwarding client requests to backend servers and returning their responses
+- `proxy_pass` is the core directive; its behavior changes with/without a trailing `/`
+  - With trailing `/` (e.g. `http://b:3000/`): replaces the location prefix with `/`
+  - Without (e.g. `http://b:3000`): passes the full original URI unchanged
+- Forwarded headers (`X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`) let backends see the real client
+- `proxy_buffering on/off` controls whether nginx buffers the full backend response before sending to client
+- Timeouts (`connect`, `read`, `send`) protect against hanging backend connections
+- Common architecture: nginx serves static files directly, proxies dynamic requests to an app server
+
+## Skills acquired
+- Setting up a Python HTTP server as a backend
+- Configuring `proxy_pass` with proper header forwarding
+- Testing the difference between static serving and proxied requests
+- Using `proxy_buffering off` for low-latency scenarios
+
+## Questions / confusion
+- What happens with WebSocket proxying? (covered in a future lesson)
+- How does nginx pick between multiple backends? (upstream / load balancing — next topic)
+
+## Next steps
+- `upstream` blocks and load balancing
+- SSL/TLS termination
+
+## Related resources
+- https://nginx.org/en/docs/http/ngx_http_proxy_module.html
+- https://nginx.org/en/docs/beginners_guide.html

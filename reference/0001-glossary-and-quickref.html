@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nginx Glossary &amp; Quick Reference</title>
+<style>
+  @page { margin: 1.5cm; size: A4; }
+  @media print { body { font-size: 10pt; column-count: 2; column-gap: 2em; } }
+  :root {
+    --bg: #faf9f8;
+    --fg: #1a1a1a;
+    --accent: #269539;
+    --accent-light: #e8f5e9;
+    --code-bg: #f0eee9;
+    --border: #d4d2cc;
+  }
+  html { font-size: 14px; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.55;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 2rem;
+  }
+  h1 { font-size: 1.6rem; color: var(--accent); margin-bottom: 0.2em; }
+  h2 { font-size: 1.15rem; margin-top: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+  h3 { font-size: 1rem; margin-top: 1.2em; }
+  .term { font-weight: 600; }
+  code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    padding: 0.1em 0.3em;
+    border-radius: 2px;
+  }
+  dl { margin: 0.5em 0; }
+  dt { font-weight: 600; margin-top: 0.6em; }
+  dd { margin-left: 1em; margin-bottom: 0.4em; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.6em 1em;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    border-left: 3px solid var(--accent);
+  }
+  .section {
+    break-inside: avoid;
+    margin-bottom: 0.5em;
+  }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin: 0.5em 0; font-size: 0.9rem; }
+  th, td { padding: 0.3em 0.5em; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--accent-light); }
+</style>
+</head>
+<body>
+
+<h1>nginx Glossary &amp; Quick Reference</h1>
+
+<div class="section">
+<h2>Glossary</h2>
+
+<dl>
+  <dt>Master process</dt>
+  <dd>The root process that reads config, binds sockets, and spawns/manages workers. Runs as root.</dd>
+
+  <dt>Worker process</dt>
+  <dd>Single-threaded process that handles connections via an event loop. Does the actual request processing.</dd>
+
+  <dt>Event loop</dt>
+  <dd>Non-blocking I/O mechanism (epoll on Linux, kqueue on BSD/macOS) that lets one worker handle thousands of connections concurrently.</dd>
+
+  <dt>Context</dt>
+  <dd>A block directive that contains other directives. Main contexts: <code>main</code>, <code>events</code>, <code>http</code>, <code>server</code>, <code>location</code>, <code>upstream</code>.</dd>
+
+  <dt>Directive</dt>
+  <dd>A configuration instruction. Simple: <code>name params;</code>. Block: <code>name { ... }</code>.</dd>
+
+  <dt>Location</dt>
+  <dd>A context inside <code>server</code> that matches request URIs by prefix or regex.</dd>
+
+  <dt>Root</dt>
+  <dd>Directive that sets the filesystem path for serving files. Appends the full URI to the path.</dd>
+
+  <dt>Alias</dt>
+  <dd>Like <code>root</code>, but replaces the matched location prefix instead of appending the full URI.</dd>
+
+  <dt>Upstream</dt>
+  <dd>A named group of backend servers used for reverse proxying and load balancing.</dd>
+
+  <dt>Reverse proxy</dt>
+  <dd>nginx receives a request, forwards it to a backend server (app server), and returns the response to the client.</dd>
+
+  <dt>proxy_pass</dt>
+  <dd>Directive that sends requests to a proxied server (URL or upstream group).</dd>
+
+  <dt>Sendfile</dt>
+  <dd>OS-level optimization that copies data from disk directly to a socket (bypassing userspace). Used for serving static files.</dd>
+
+  <dt>C10K problem</dt>
+  <dd>The challenge of handling 10,000 simultaneous connections. nginx was designed specifically to solve this.</dd>
+
+  <dt>Server block</dt>
+  <dd>nginx's equivalent of Apache's "virtual host". Defines a site listening on a specific port/hostname.</dd>
+</dl>
+</div>
+
+<div class="section">
+<h2>Common Directives</h2>
+
+<table>
+  <tr><th>Directive</th><th>Context</th><th>What it does</th></tr>
+  <tr><td><code>listen</code></td><td>server</td><td>Port (and optional IP) to bind: <code>listen 80;</code> <code>listen 443 ssl;</code></td></tr>
+  <tr><td><code>server_name</code></td><td>server</td><td>Hostname(s) this server block handles: <code>server_name example.com *.example.com;</code></td></tr>
+  <tr><td><code>root</code></td><td>http, server, location</td><td>Document root for files: <code>root /var/www;</code></td></tr>
+  <tr><td><code>alias</code></td><td>location</td><td>Replace location path with a different filesystem path</td></tr>
+  <tr><td><code>index</code></td><td>http, server, location</td><td>Default file to serve: <code>index index.html index.htm;</code></td></tr>
+  <tr><td><code>try_files</code></td><td>location</td><td>Try paths in order, fallback to last: <code>try_files $uri /index.html;</code></td></tr>
+  <tr><td><code>proxy_pass</code></td><td>location</td><td>Forward requests to: <code>proxy_pass http://backend;</code></td></tr>
+  <tr><td><code>rewrite</code></td><td>server, location</td><td>URI rewriting: <code>rewrite ^/old /new permanent;</code></td></tr>
+  <tr><td><code>return</code></td><td>server, location</td><td>Return status code/URL: <code>return 301 https://$host$request_uri;</code></td></tr>
+  <tr><td><code>worker_processes</code></td><td>main</td><td>Number of workers (often <code>auto</code> for core count)</td></tr>
+  <tr><td><code>worker_connections</code></td><td>events</td><td>Max connections per worker</td></tr>
+  <tr><td><code>error_log</code></td><td>main, http, server, location</td><td>Error log path and level: <code>error_log logs/error.log warn;</code></td></tr>
+  <tr><td><code>access_log</code></td><td>http, server, location</td><td>Access log path: <code>access_log logs/access.log main;</code></td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>Location Matching Rules</h2>
+
+<table>
+  <tr><th>Syntax</th><th>Type</th><th>Precedence</th></tr>
+  <tr><td><code>location = /path</code></td><td>Exact match</td><td>Highest</td></tr>
+  <tr><td><code>location ^~ /path</code></td><td>Prefix, no regex check</td><td>High</td></tr>
+  <tr><td><code>location ~ pattern</code></td><td>Regex (case-sensitive)</td><td>Medium</td></tr>
+  <tr><td><code>location ~* pattern</code></td><td>Regex (case-insensitive)</td><td>Medium</td></tr>
+  <tr><td><code>location /path</code></td><td>Prefix (standard)</td><td>Lowest (longest match wins)</td></tr>
+</table>
+
+<p>Priority order: <strong>exact</strong> &gt; <strong>prefix with ^~</strong> &gt; <strong>regex (~ / ~*)</strong> &gt; <strong>plain prefix</strong> (then longest wins).</p>
+</div>
+
+<div class="section">
+<h2>nginx vs Apache Cheat Sheet</h2>
+
+<table>
+  <tr><th>Concept</th><th>Apache</th><th>nginx</th></tr>
+  <tr><td>Per-directory config</td><td><code>.htaccess</code></td><td>Not supported (centralized only)</td></tr>
+  <tr><td>Connection model</td><td>Process/thread per conn</td><td>Event-driven, async</td></tr>
+  <tr><td>Virtual host</td><td><code>&lt;VirtualHost&gt;</code></td><td><code>server { }</code></td></tr>
+  <tr><td>URL rewriting</td><td><code>RewriteRule</code></td><td><code>rewrite</code> / <code>return</code></td></tr>
+  <tr><td>Access control</td><td><code>Require</code></td><td><code>allow</code> / <code>deny</code></td></tr>
+  <tr><td>Reverse proxy</td><td><code>ProxyPass</code></td><td><code>proxy_pass</code></td></tr>
+</table>
+</div>
+
+<p style="margin-top:2em; font-style:italic;">
+See <a href="../lessons/0001-what-is-nginx-and-serve-static-site.html">Lesson 1</a>
+for the hands-on tutorial. Read the
+<a href="https://nginx.org/en/docs/">official docs</a> for authoritative details.
+</p>
+
+</body>
+</html>

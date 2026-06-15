@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 2: Reverse Proxying with nginx</title>
+<style>
+  @page { margin: 2cm; size: A4; }
+  @media print { body { font-size: 11pt; } }
+  :root {
+    --bg: #faf9f8;
+    --fg: #1a1a1a;
+    --accent: #269539;
+    --accent-light: #e8f5e9;
+    --code-bg: #f0eee9;
+    --border: #d4d2cc;
+    --warm: #fff8f0;
+    --width: min(48rem, 100% - 3rem);
+  }
+  html { font-size: 16px; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    padding: 2rem 0;
+  }
+  .container { max-width: var(--width); margin: 0 auto; }
+  h1, h2, h3 { font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 600; line-height: 1.3; }
+  h1 { font-size: 2rem; margin-bottom: 0.2em; color: var(--accent); }
+  h2 { font-size: 1.35rem; margin-top: 2em; border-bottom: 2px solid var(--border); padding-bottom: 0.3em; }
+  h3 { font-size: 1.1rem; margin-top: 1.5em; }
+  p, li { margin-bottom: 0.8rem; }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 1rem 1.2rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    border-left: 4px solid var(--accent);
+  }
+  .diagram {
+    background: var(--warm);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    font-family: 'SF Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  blockquote {
+    margin: 1.5em 0;
+    padding: 0.8em 1.2em;
+    background: var(--accent-light);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  blockquote p { margin: 0; }
+  .callout {
+    background: #fff3cd;
+    border-left: 4px solid #856404;
+    padding: 0.8em 1.2em;
+    border-radius: 4px;
+    margin: 1.5em 0;
+  }
+  .tip {
+    background: #e8f5e9;
+    border-left: 4px solid #269539;
+    padding: 0.8em 1.2em;
+    border-radius: 4px;
+    margin: 1.5em 0;
+  }
+  a { color: var(--accent); text-decoration: underline; }
+  a:hover { text-decoration: none; }
+  .ref { font-size: 0.85rem; color: #555; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Lesson 2: Reverse Proxying</h1>
+<p class="ref">
+  Prerequisite: <a href="../lessons/0001-what-is-nginx-and-serve-static-site.html">Lesson 1</a>.
+  Reference: <a href="../reference/0001-glossary-and-quickref.html">Glossary</a>.
+</p>
+
+<h2>The Big Idea</h2>
+
+<p>
+A <strong>reverse proxy</strong> sits in front of one or more backend servers and forwards
+client requests to them. The client talks only to nginx; the backend is never directly
+exposed. This is one of nginx's most common use cases.
+</p>
+
+<div class="diagram">┌──────┐   request    ┌──────────┐   forward    ┌──────────┐
+│Client│ ──────────▶  │  nginx   │ ──────────▶  │  Backend │
+│      │ ◀────────── │ (proxy)  │ ◀────────── │  (app)   │
+└──────┘   response   └──────────┘   response   └──────────┘</div>
+
+<h3>Why use a reverse proxy?</h3>
+<ul>
+  <li><strong>Hide internals:</strong> Backend apps (Node, Python, Ruby) listen on private ports; only nginx is public on 80/443.</li>
+  <li><strong>SSL termination:</strong> nginx handles HTTPS; the backend speaks plain HTTP.</li>
+  <li><strong>Load balancing:</strong> Distribute traffic across multiple backend instances.</li>
+  <li><strong>Caching:</strong> Cache backend responses in nginx to reduce load.</li>
+  <li><strong>Static offload:</strong> nginx serves static files (CSS, JS, images) directly — the backend never sees them.</li>
+  <li><strong>Buffering:</strong> nginx buffers slow backend responses so clients receive data efficiently.</li>
+</ul>
+
+<h2>The Core Directive: <code>proxy_pass</code></h2>
+
+<p>The simplest reverse proxy config. Everything starting with <code>/api/</code> goes to a backend:</p>
+
+<pre>server {
+    listen 80;
+
+    location /api/ {
+        proxy_pass http://localhost:3000;
+    }
+
+    location / {
+        root /var/www/static;
+    }
+}</pre>
+
+<p>Requests to <code>/api/users</code> get forwarded to <code>http://localhost:3000/api/users</code>.
+Requests to <code>/index.html</code> are served from disk — the backend never sees them.</p>
+
+<div class="callout">
+<strong>No trailing slash?</strong> If <code>proxy_pass</code> has a URI path
+(e.g. <code>http://localhost:3000/</code> with trailing <code>/</code>), it
+<em>replaces</em> the matched location prefix. If it has no path
+(e.g. <code>http://localhost:3000</code>), the full original URI is passed through.
+</div>
+
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <tr style="border-bottom:1px solid var(--border);">
+    <th style="text-align:left; padding:0.5em;">Config</th>
+    <th style="text-align:left; padding:0.5em;">Request</th>
+    <th style="text-align:left; padding:0.5em;">Backend receives</th>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;"><code>proxy_pass http://b:3000;</code></td>
+    <td style="padding:0.5em;"><code>/api/foo</code></td>
+    <td style="padding:0.5em;"><code>/api/foo</code></td>
+  </tr>
+  <tr>
+    <td style="padding:0.5em;"><code>proxy_pass http://b:3000/;</code> (with trailing <code>/</code>)</td>
+    <td style="padding:0.5em;"><code>/api/foo</code></td>
+    <td style="padding:0.5em;"><code>/foo</code> (prefix replaced)</td>
+  </tr>
+</table>
+
+<h2>Forwarding Client Information</h2>
+
+<p>When nginx proxies a request, the backend sees nginx's IP, not the real client.
+Fix this by forwarding headers:</p>
+
+<pre>location /api/ {
+    proxy_pass http://localhost:3000;
+
+    proxy_set_header Host               $host;
+    proxy_set_header X-Real-IP          $remote_addr;
+    proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto  $scheme;
+}</pre>
+
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <tr style="border-bottom:1px solid var(--border);">
+    <th style="text-align:left; padding:0.5em;">Header</th>
+    <th style="text-align:left; padding:0.5em;">What it contains</th>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;"><code>X-Real-IP</code></td>
+    <td style="padding:0.5em;">The client's real IP (<code>$remote_addr</code>)</td>
+  </tr>
+  <tr style="border-bottom:1px solid var(--border);">
+    <td style="padding:0.5em;"><code>X-Forwarded-For</code></td>
+    <td style="padding:0.5em;">Chain of IPs the request passed through</td>
+  </tr>
+  <tr>
+    <td style="padding:0.5em;"><code>X-Forwarded-Proto</code></td>
+    <td style="padding:0.5em;"><code>http</code> or <code>https</code> (so the backend knows if SSL was used)</td>
+  </tr>
+</table>
+
+<h2>Hands-on: Proxy a Python HTTP Server</h2>
+
+<h3>Step 1: Start a simple Python backend</h3>
+<pre>mkdir -p /tmp/proxy-demo/backend
+
+cat &lt;&lt; 'PYEOF' &gt; /tmp/proxy-demo/backend/app.py
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = (
+            f"&lt;h1&gt;Hello from Python!&lt;/h1&gt;\n"
+            f"&lt;pre&gt;\n"
+            f"Path: {self.path}\n"
+            f"X-Real-IP: {self.headers.get('X-Real-IP', 'none')}\n"
+            f"X-Forwarded-For: {self.headers.get('X-Forwarded-For', 'none')}\n"
+            f"X-Forwarded-Proto: {self.headers.get('X-Forwarded-Proto', 'none')}\n"
+            f"&lt;/pre&gt;"
+        ).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+HTTPServer(('', 3000), Handler).serve_forever()
+PYEOF
+
+python3 /tmp/proxy-demo/backend/app.py &amp;</pre>
+
+<h3>Step 2: nginx config that proxies to it</h3>
+<pre># /tmp/proxy-demo/nginx.conf
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    server {
+        listen 8080;
+        server_name localhost;
+
+        # Proxy /api/ to the Python backend
+        location /api/ {
+            proxy_pass http://localhost:3000/;  # trailing / strips /api/
+
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Serve static files directly (no backend)
+        location / {
+            root /tmp/proxy-demo/www;
+        }
+    }
+}</pre>
+
+<pre>mkdir -p /tmp/proxy-demo/www
+echo '&lt;h1&gt;Static page (served by nginx directly)&lt;/h1&gt;' &gt; /tmp/proxy-demo/www/index.html</pre>
+
+<h3>Step 3: Start nginx</h3>
+<pre>nginx -c /tmp/proxy-demo/nginx.conf</pre>
+
+<h3>Step 4: Test</h3>
+<pre># Static content — served by nginx, no backend involved
+curl http://localhost:8080/
+# → &lt;h1&gt;Static page (served by nginx directly)&lt;/h1&gt;
+
+# Proxied to Python backend
+curl http://localhost:8080/api/test
+# → &lt;h1&gt;Hello from Python!&lt;/h1&gt;
+#   Path: /test
+#   X-Real-IP: 127.0.0.1
+#   X-Forwarded-For: 127.0.0.1</pre>
+
+<h3>Step 5: Clean up</h3>
+<pre>nginx -s quit
+kill %1  # stop the Python server</pre>
+
+<div class="tip">
+<strong>Key insight:</strong> The backend sees <code>/test</code> (not <code>/api/test</code>)
+because we used <code>proxy_pass http://localhost:3000/;</code> with a trailing slash,
+which replaces the <code>/api/</code> prefix. Try removing the trailing <code>/</code>
+and see what changes.
+</div>
+
+<h2>Buffering (and When to Turn It Off)</h2>
+
+<p>By default, nginx buffers responses from the backend. This means:</p>
+<ol>
+  <li>nginx reads the entire response from the backend into buffers.</li>
+  <li>Then sends it to the client at network speed.</li>
+</ol>
+
+<p>Benefits: frees up the backend quickly, handles slow clients efficiently.</p>
+
+<p>Downside: adds latency for the first byte (TTFB). Turn it off for real-time apps:</p>
+
+<pre>location /api/ {
+    proxy_buffering off;
+    proxy_pass http://localhost:3000;
+}</pre>
+
+<h2>Timeouts</h2>
+
+<p>Backend connections can hang. nginx gives you safety nets:</p>
+
+<pre>location /api/ {
+    proxy_connect_timeout   5s;   # how long to wait for the TCP handshake
+    proxy_read_timeout      30s;  # how long between successive reads from backend
+    proxy_send_timeout      30s;  # how long between successive writes to backend
+    proxy_pass http://localhost:3000;
+}</pre>
+
+<h2>What You Learned</h2>
+<ul>
+  <li>A reverse proxy forwards client requests to backend servers while hiding them</li>
+  <li><code>proxy_pass</code> is the core directive for proxying</li>
+  <li>Trailing <code>/</code> on <code>proxy_pass</code> replaces the location prefix; no trailing slash passes the full URI</li>
+  <li>Forward <code>X-Real-IP</code>, <code>X-Forwarded-For</code>, <code>X-Forwarded-Proto</code> so backends know the real client</li>
+  <li>Buffering is on by default; disable with <code>proxy_buffering off</code> for real-time apps</li>
+  <li>Set timeouts to avoid hanging connections to unhealthy backends</li>
+</ul>
+
+<blockquote>
+<strong>Next up:</strong> We'll use <code>upstream</code> blocks to load-balance traffic
+across multiple backend servers. If you're ready for more, ask "What's next?".
+Or try the exercise below first.
+</blockquote>
+
+<hr>
+
+<h2>✏ Quick Exercise</h2>
+
+<p>Modify the config so that:</p>
+<ol>
+  <li>The static files are served from <code>/tmp/proxy-demo/www</code> on <strong>port 8080</strong> (already done above).</li>
+  <li>The backend is proxied on <strong>port 8081</strong> instead (a new server block).</li>
+  <li>Test both ports.</li>
+</ol>
+
+<p>When you're ready, ask "What's next?" or any questions you have.</p>
+
+</div>
+</body>
+</html>
